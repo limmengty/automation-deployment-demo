@@ -8,7 +8,7 @@ pipeline {
   }
 
   parameters {
-    string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to build')
+    string(name: 'GIT_BRANCH', defaultValue: 'master', description: 'Git branch to build')
     string(name: 'DOCKER_REPO', defaultValue: 'mengty199/mengty', description: 'Docker repository (user/repo)')
     string(name: 'GIT_REPO', defaultValue: 'https://github.com/sothylorn/employee-api.git', description: 'Git repository URL')
     string(name: 'DOCKER_USER', defaultValue: 'mengty199', description: 'Docker Hub username')
@@ -89,19 +89,19 @@ pipeline {
         script {
           // Use username/password SSH credential with id 'deploy_ssh_pwd' (username and password)
           withCredentials([usernamePassword(credentialsId: 'deploy_ssh_pwd', usernameVariable: 'DEPLOY_SSH_USER', passwordVariable: 'DEPLOY_SSH_PASS')]) {
-            sh '''
+            sh """
               set -e
               if ! command -v sshpass >/dev/null 2>&1; then
                 echo "sshpass not found, attempting to install"
-                if [ -x "$(command -v apt-get)" ]; then
+                if [ -x "\$(command -v apt-get)" ]; then
                   sudo apt-get update && sudo apt-get install -y sshpass || true
                 else
                   echo "Please ensure sshpass is installed on the agent"
                 fi
               fi
 
-              sshpass -p "$DEPLOY_SSH_PASS" ssh -o StrictHostKeyChecking=no $DEPLOY_SSH_USER@${params.DEPLOY_HOST} "cd ${params.DEPLOY_DIR} && docker pull ${params.DOCKER_REPO}:${env.DOCKER_TAG} && docker rm -f ${env.PROJECT_NAME} || true && docker run -d --name ${env.PROJECT_NAME} -p 4000:4000 --restart always ${params.DOCKER_REPO}:${env.DOCKER_TAG}"
-            '''
+              sshpass -p "\$DEPLOY_SSH_PASS" ssh -o StrictHostKeyChecking=no \$DEPLOY_SSH_USER@${params.DEPLOY_HOST} "cd ${params.DEPLOY_DIR} && docker pull ${params.DOCKER_REPO}:${env.DOCKER_TAG} && docker rm -f ${env.PROJECT_NAME} || true && docker run -d --name ${env.PROJECT_NAME} -p 4000:4000 --restart always ${params.DOCKER_REPO}:${env.DOCKER_TAG}"
+            """
           }
         }
       }
