@@ -109,7 +109,7 @@ pipeline {
   }
     post {
     success {
-      node {
+      node('built-in') {
         script {
           withCredentials([string(credentialsId: 'telegram_token', variable: 'TELEGRAM_TOKEN'), string(credentialsId: 'telegram_chat_id', variable: 'TELEGRAM_CHAT_ID')]) {
             def message = "🚀 *Deployment succeeded!*\n- Application: ${env.PROJECT_NAME}\n- URL: ${env.APP_URL}\n- Image: ${params.DOCKER_REPO}:${env.DOCKER_TAG}\n- Build: ${env.BUILD_URL}"
@@ -119,7 +119,7 @@ pipeline {
       }
     }    
     failure {
-      node {
+      node('built-in') {
         script {
           withCredentials([string(credentialsId: 'telegram_token', variable: 'TELEGRAM_TOKEN'), string(credentialsId: 'telegram_chat_id', variable: 'TELEGRAM_CHAT_ID')]) {
             def message = "❌ *Deployment failed!*\n- Application: ${env.PROJECT_NAME}\n- Build: ${env.BUILD_URL}"
@@ -130,7 +130,7 @@ pipeline {
     }
 
     always {
-      node {
+      node('built-in') {
         cleanWs()
       }
     }
