@@ -23,7 +23,7 @@ pipeline {
   }
   stages {
     stage('Checkout') {
-      agent { label 'linux' }
+      agent any
       steps {
         cleanWs()
         checkout([$class: 'GitSCM', branches: [[name: "refs/heads/${params.GIT_BRANCH}"]], userRemoteConfigs: [[url: params.GIT_REPO]]])
@@ -31,7 +31,7 @@ pipeline {
     }
 
     stage('Set Metadata') {
-      agent { label 'linux' }
+      agent any
       steps {
         script {
           env.GIT_COMMIT_SHORT = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
@@ -42,7 +42,7 @@ pipeline {
     }
 
     stage('Lint & Test') {
-      agent { label 'linux' }
+      agent any
       when { expression { return !params.SKIP_TESTS } }
       steps {
         script {
@@ -63,7 +63,7 @@ pipeline {
     }
 
     stage('Build Docker Image') {
-      agent { label 'linux' }
+      agent any
       steps {
         script {
           sh "docker build -t ${params.DOCKER_REPO}:${env.DOCKER_TAG} ."
@@ -72,7 +72,7 @@ pipeline {
     }
 
     stage('Push Docker Image') {
-      agent { label 'linux' }
+      agent any
       steps {
         script {
           withCredentials([string(credentialsId: 'docker_hub_password', variable: 'DOCKER_PASS')]) {
@@ -84,7 +84,7 @@ pipeline {
     }
 
     stage('Deploy to Server') {
-      agent { label 'linux' }
+      agent any
       steps {
         script {
           // Use username/password SSH credential with id 'deploy_ssh_pwd' (username and password)
