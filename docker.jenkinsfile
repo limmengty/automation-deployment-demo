@@ -9,11 +9,11 @@ pipeline {
 
   parameters {
     string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to build')
-    string(name: 'DOCKER_REPO', defaultValue: 'sothy/employee-api-demo', description: 'Docker repository (user/repo)')
+    string(name: 'DOCKER_REPO', defaultValue: 'mengty199/mengty', description: 'Docker repository (user/repo)')
     string(name: 'GIT_REPO', defaultValue: 'https://github.com/sothylorn/employee-api.git', description: 'Git repository URL')
-    string(name: 'DOCKER_USER', defaultValue: 'sothy', description: 'Docker Hub username')
-    string(name: 'DEPLOY_HOST', defaultValue: '152.42.214.43', description: 'Target host for deployment')
-    string(name: 'DEPLOY_DIR', defaultValue: '/otp/foldername', description: 'Target directory on host')
+    string(name: 'DOCKER_USER', defaultValue: 'mengty199', description: 'Docker Hub username')
+    string(name: 'DEPLOY_HOST', defaultValue: '172.237.82.20', description: 'Target host for deployment')
+    string(name: 'DEPLOY_DIR', defaultValue: '/otp/employee-api', description: 'Target directory on host')
     booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip test stage')
   }
 
@@ -109,24 +109,30 @@ pipeline {
   }
     post {
     success {
-      script {
-        withCredentials([string(credentialsId: 'telegram_token', variable: 'TELEGRAM_TOKEN'), string(credentialsId: 'telegram_chat_id', variable: 'TELEGRAM_CHAT_ID')]) {
-          def message = "🚀 *Deployment succeeded!*\n- Application: ${env.PROJECT_NAME}\n- URL: ${env.APP_URL}\n- Image: ${params.DOCKER_REPO}:${env.DOCKER_TAG}\n- Build: ${env.BUILD_URL}"
-          sh "curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage -d chat_id=${TELEGRAM_CHAT_ID} -d parse_mode=Markdown -d text=\"${message}\""
+      node {
+        script {
+          withCredentials([string(credentialsId: 'telegram_token', variable: 'TELEGRAM_TOKEN'), string(credentialsId: 'telegram_chat_id', variable: 'TELEGRAM_CHAT_ID')]) {
+            def message = "🚀 *Deployment succeeded!*\n- Application: ${env.PROJECT_NAME}\n- URL: ${env.APP_URL}\n- Image: ${params.DOCKER_REPO}:${env.DOCKER_TAG}\n- Build: ${env.BUILD_URL}"
+            sh "curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage -d chat_id=${TELEGRAM_CHAT_ID} -d parse_mode=Markdown -d text=\"${message}\""
+          }
         }
       }
     }    
     failure {
-      script {
-        withCredentials([string(credentialsId: 'telegram_token', variable: 'TELEGRAM_TOKEN'), string(credentialsId: 'telegram_chat_id', variable: 'TELEGRAM_CHAT_ID')]) {
-          def message = "❌ *Deployment failed!*\n- Application: ${env.PROJECT_NAME}\n- Build: ${env.BUILD_URL}"
-          sh "curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage -d chat_id=${TELEGRAM_CHAT_ID} -d parse_mode=Markdown -d text=\"${message}\""
+      node {
+        script {
+          withCredentials([string(credentialsId: 'telegram_token', variable: 'TELEGRAM_TOKEN'), string(credentialsId: 'telegram_chat_id', variable: 'TELEGRAM_CHAT_ID')]) {
+            def message = "❌ *Deployment failed!*\n- Application: ${env.PROJECT_NAME}\n- Build: ${env.BUILD_URL}"
+            sh "curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage -d chat_id=${TELEGRAM_CHAT_ID} -d parse_mode=Markdown -d text=\"${message}\""
+          }
         }
       }
     }
 
     always {
-      cleanWs()
+      node {
+        cleanWs()
+      }
     }
   }
 }
