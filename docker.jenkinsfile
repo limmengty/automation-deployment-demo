@@ -1,0 +1,133 @@
+pipeline {
+  agent none
+  options {
+    timestamps()
+    ansiColor('xterm')
+    skipDefaultCheckout()
+    buildDiscarder(logRotator(numToKeepStr: '10', daysToKeepStr: '30'))
+    timeout(time: 1, unit: 'HOURS')
+  }
+
+  parameters {
+    string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Git branch to build')
+    string(name: 'DOCKER_REPO', defaultValue: 'sothy/employee-api-demo', description: 'Docker repository (user/repo)')
+    string(name: 'GIT_REPO', defaultValue: 'https://github.com/sothylorn/employee-api.git', description: 'Git repository URL')
+    string(name: 'DOCKER_USER', defaultValue: 'sothy', description: 'Docker Hub username')
+    string(name: 'DEPLOY_HOST', defaultValue: '152.42.214.43', description: 'Target host for deployment')
+    string(name: 'DEPLOY_DIR', defaultValue: '/otp/foldername', description: 'Target directory on host')
+    booleanParam(name: 'SKIP_TESTS', defaultValue: false, description: 'Skip test stage')
+  }
+
+  environment {
+    PROJECT_NAME = 'employee-api'
+    APP_URL = 'https://employee-api.sothy.site'
+  }
+  stages {
+    stage('Checkout') {
+      agent { label 'linux' }
+      steps {
+        cleanWs()
+        checkout([$class: 'GitSCM', branches: [[name: "refs/heads/${params.GIT_BRANCH}"]], userRemoteConfigs: [[url: params.GIT_REPO]]])
+      }
+    }
+
+    stage('Set Metadata') {
+      agent { label 'linux' }
+      steps {
+        script {
+          env.GIT_COMMIT_SHORT = sh(returnStdout: true, script: 'git rev-parse --short HEAD').trim()
+          env.DOCKER_TAG = "${env.GIT_COMMIT_SHORT}-${env.BUILD_NUMBER}"
+          echo "Docker tag will be: ${params.DOCKER_REPO}:${env.DOCKER_TAG}"
+        }
+      }
+    }
+
+    stage('Lint & Test') {
+      agent { label 'linux' }
+      when { expression { return !params.SKIP_TESTS } }
+      steps {
+        script {
+          if (fileExists('package.json')) {
+            echo 'Found package.json, running npm ci and npm test if tests exist'
+            sh 'npm ci'
+            def hasTest = sh(script: "cat package.json | grep -q '\"test\"' || true", returnStatus: true)
+            if (hasTest == 0) {
+              sh 'npm test'
+            } else {
+              echo 'No test script found, skipping tests.'
+            }
+          } else {
+            echo 'No package.json, skipping lint/test.'
+          }
+        }
+      }
+    }
+
+    stage('Build Docker Image') {
+      agent { label 'linux' }
+      steps {
+        script {
+          sh "docker build -t ${params.DOCKER_REPO}:${env.DOCKER_TAG} ."
+        }
+      }
+    }
+
+    stage('Push Docker Image') {
+      agent { label 'linux' }
+      steps {
+        script {
+          withCredentials([string(credentialsId: 'docker_hub_password', variable: 'DOCKER_PASS')]) {
+            sh 'echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin'
+            sh "docker push ${params.DOCKER_REPO}:${env.DOCKER_TAG}"
+          }
+        }
+      }
+    }
+
+    stage('Deploy to Server') {
+      agent { label 'linux' }
+      steps {
+        script {
+          // Use username/password SSH credential with id 'deploy_ssh_pwd' (username and password)
+          withCredentials([usernamePassword(credentialsId: 'deploy_ssh_pwd', usernameVariable: 'DEPLOY_SSH_USER', passwordVariable: 'DEPLOY_SSH_PASS')]) {
+            sh '''
+              set -e
+              if ! command -v sshpass >/dev/null 2>&1; then
+                echo "sshpass not found, attempting to install"
+                if [ -x "$(command -v apt-get)" ]; then
+                  sudo apt-get update && sudo apt-get install -y sshpass || true
+                else
+                  echo "Please ensure sshpass is installed on the agent"
+                fi
+              fi
+
+              sshpass -p "$DEPLOY_SSH_PASS" ssh -o StrictHostKeyChecking=no $DEPLOY_SSH_USER@${params.DEPLOY_HOST} "cd ${params.DEPLOY_DIR} && docker pull ${params.DOCKER_REPO}:${env.DOCKER_TAG} && docker rm -f ${env.PROJECT_NAME} || true && docker run -d --name ${env.PROJECT_NAME} -p 4000:4000 --restart always ${params.DOCKER_REPO}:${env.DOCKER_TAG}"
+            '''
+          }
+        }
+      }
+    }
+  }
+    post {
+    success {
+      script {
+        withCredentials([string(credentialsId: 'telegram_token', variable: 'TELEGRAM_TOKEN'), string(credentialsId: 'telegram_chat_id', variable: 'TELEGRAM_CHAT_ID')]) {
+          def message = "🚀 *Deployment succeeded!*\n- Application: ${env.PROJECT_NAME}\n- URL: ${env.APP_URL}\n- Image: ${params.DOCKER_REPO}:${env.DOCKER_TAG}\n- Build: ${env.BUILD_URL}"
+          sh "curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage -d chat_id=${TELEGRAM_CHAT_ID} -d parse_mode=Markdown -d text=\"${message}\""
+        }
+      }
+    }    
+    failure {
+      script {
+        withCredentials([string(credentialsId: 'telegram_token', variable: 'TELEGRAM_TOKEN'), string(credentialsId: 'telegram_chat_id', variable: 'TELEGRAM_CHAT_ID')]) {
+          def message = "❌ *Deployment failed!*\n- Application: ${env.PROJECT_NAME}\n- Build: ${env.BUILD_URL}"
+          sh "curl -s -X POST https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage -d chat_id=${TELEGRAM_CHAT_ID} -d parse_mode=Markdown -d text=\"${message}\""
+        }
+      }
+    }
+
+    always {
+      cleanWs()
+    }
+  }
+}
